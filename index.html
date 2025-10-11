@@ -1,45 +1,316 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Simple Homepage</title>
-  <style>
-    html,body{height:100%;margin:0}
-    body{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:#ffffff;
-      transition: background 300ms ease;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    }
-    body.alt-bg{background:#bfe7ff}
-    .btn{
-      appearance:none;
-      border:0;
-      padding:14px 22px;
-      border-radius:10px;
-      font-size:16px;
-      cursor:pointer;
-      box-shadow:0 6px 18px rgba(0,0,0,0.12);
-      background:linear-gradient(180deg,#fff 0%,#e6f2ff 100%);
-    }
-    .btn:active{transform:translateY(1px)}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strava Route Visualizer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #map {
+            flex: 1;
+            width: 100%;
+        }
+        .controls {
+            background: white;
+            padding: 15px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+        .file-input-wrapper label {
+            background: #fc4c02;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            display: inline-block;
+        }
+        .file-input-wrapper label:hover {
+            background: #e04402;
+        }
+        button {
+            background: #fc4c02;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #e04402;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .speed-control input {
+            width: 100px;
+        }
+        .info {
+            margin-left: auto;
+            font-size: 14px;
+            color: #666;
+        }
+        .progress {
+            flex: 1;
+            min-width: 200px;
+        }
+        .progress input {
+            width: 100%;
+        }
+        #fileCount {
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
 </head>
 <body>
-  <button id="toggleBtn" class="btn" aria-pressed="false">Change background</button>
+    <div id="map"></div>
+    <div class="controls">
+        <div class="file-input-wrapper">
+            <input type="file" id="fileInput" multiple accept=".gpx,.tcx" />
+            <label for="fileInput">Load GPX/TCX Files</label>
+        </div>
+        <span id="fileCount">No files loaded</span>
+        <button id="playBtn" disabled>Play</button>
+        <button id="pauseBtn" disabled>Pause</button>
+        <button id="resetBtn" disabled>Reset</button>
+        <div class="speed-control">
+            <label for="speedSlider">Speed:</label>
+            <input type="range" id="speedSlider" min="1" max="500" value="100" />
+            <span id="speedValue">100x</span>
+        </div>
+        <div class="progress">
+            <input type="range" id="progressSlider" min="0" max="100" value="0" disabled />
+        </div>
+        <div class="info" id="info"></div>
+    </div>
 
-  <script>
-    const btn = document.getElementById('toggleBtn');
-    btn.addEventListener('click', () => {
-      document.body.classList.toggle('alt-bg');
-      const isAlt = document.body.classList.contains('alt-bg');
-      btn.setAttribute('aria-pressed', String(isAlt));
-      // optional: change button text
-      btn.textContent = isAlt ? 'Revert background' : 'Change background';
-    });
-  </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        let map;
+        let activities = [];
+        let allRoutes = [];
+        let animatedMarkers = [];
+        let isPlaying = false;
+        let animationSpeed = 100;
+        let startTime = null;
+        let currentTime = 0;
+        let animationFrame = null;
+
+        // Initialize map
+        map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Parse GPX file
+        function parseGPX(xmlDoc) {
+            const points = [];
+            const trkpts = xmlDoc.getElementsByTagName('trkpt');
+            
+            for (let i = 0; i < trkpts.length; i++) {
+                const pt = trkpts[i];
+                const lat = parseFloat(pt.getAttribute('lat'));
+                const lon = parseFloat(pt.getAttribute('lon'));
+                const timeEl = pt.getElementsByTagName('time')[0];
+                const time = timeEl ? new Date(timeEl.textContent).getTime() : null;
+                
+                points.push({ lat, lon, time });
+            }
+            return points;
+        }
+
+        // Parse TCX file
+        function parseTCX(xmlDoc) {
+            const points = [];
+            const trackpoints = xmlDoc.getElementsByTagName('Trackpoint');
+            
+            for (let i = 0; i < trackpoints.length; i++) {
+                const tp = trackpoints[i];
+                const posEl = tp.getElementsByTagName('Position')[0];
+                if (!posEl) continue;
+                
+                const lat = parseFloat(posEl.getElementsByTagName('LatitudeDegrees')[0].textContent);
+                const lon = parseFloat(posEl.getElementsByTagName('LongitudeDegrees')[0].textContent);
+                const timeEl = tp.getElementsByTagName('Time')[0];
+                const time = timeEl ? new Date(timeEl.textContent).getTime() : null;
+                
+                points.push({ lat, lon, time });
+            }
+            return points;
+        }
+
+        // Load files
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            activities = [];
+            allRoutes.forEach(route => map.removeLayer(route));
+            allRoutes = [];
+            
+            for (const file of files) {
+                const text = await file.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, 'text/xml');
+                
+                let points;
+                if (file.name.toLowerCase().endsWith('.gpx')) {
+                    points = parseGPX(xmlDoc);
+                } else if (file.name.toLowerCase().endsWith('.tcx')) {
+                    points = parseTCX(xmlDoc);
+                }
+                
+                if (points && points.length > 0) {
+                    activities.push({
+                        name: file.name,
+                        points: points
+                    });
+                    
+                    // Draw full route
+                    const coords = points.map(p => [p.lat, p.lon]);
+                    const polyline = L.polyline(coords, {
+                        color: '#fc4c02',
+                        weight: 2,
+                        opacity: 0.6
+                    }).addTo(map);
+                    allRoutes.push(polyline);
+                }
+            }
+            
+            if (activities.length > 0) {
+                // Fit map to all routes
+                const group = new L.featureGroup(allRoutes);
+                map.fitBounds(group.getBounds());
+                
+                document.getElementById('fileCount').textContent = `${activities.length} activities loaded`;
+                document.getElementById('playBtn').disabled = false;
+                document.getElementById('resetBtn').disabled = false;
+            }
+        });
+
+        // Speed control
+        document.getElementById('speedSlider').addEventListener('input', (e) => {
+            animationSpeed = parseInt(e.target.value);
+            document.getElementById('speedValue').textContent = `${animationSpeed}x`;
+        });
+
+        // Animation function
+        function animate(timestamp) {
+            if (!isPlaying) return;
+            
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            currentTime = elapsed * animationSpeed;
+            
+            // Find earliest and latest times
+            let minTime = Infinity;
+            let maxTime = -Infinity;
+            activities.forEach(activity => {
+                activity.points.forEach(p => {
+                    if (p.time) {
+                        minTime = Math.min(minTime, p.time);
+                        maxTime = Math.max(maxTime, p.time);
+                    }
+                });
+            });
+            
+            const totalDuration = maxTime - minTime;
+            const progress = (currentTime / totalDuration) * 100;
+            
+            if (progress >= 100) {
+                pause();
+                return;
+            }
+            
+            document.getElementById('progressSlider').value = progress;
+            
+            // Update markers
+            animatedMarkers.forEach(marker => map.removeLayer(marker));
+            animatedMarkers = [];
+            
+            activities.forEach(activity => {
+                const startActivityTime = activity.points[0].time;
+                const activityCurrentTime = startActivityTime + currentTime;
+                
+                // Find current position
+                for (let i = 0; i < activity.points.length - 1; i++) {
+                    if (activity.points[i].time <= activityCurrentTime && 
+                        activity.points[i + 1].time > activityCurrentTime) {
+                        const marker = L.circleMarker([activity.points[i].lat, activity.points[i].lon], {
+                            radius: 5,
+                            color: '#ff0000',
+                            fillColor: '#ff0000',
+                            fillOpacity: 1
+                        }).addTo(map);
+                        animatedMarkers.push(marker);
+                        break;
+                    }
+                }
+            });
+            
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        function play() {
+            isPlaying = true;
+            startTime = null;
+            document.getElementById('playBtn').disabled = true;
+            document.getElementById('pauseBtn').disabled = false;
+            document.getElementById('progressSlider').disabled = false;
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        function pause() {
+            isPlaying = false;
+            startTime = null;
+            document.getElementById('playBtn').disabled = false;
+            document.getElementById('pauseBtn').disabled = true;
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+            }
+        }
+
+        function reset() {
+            pause();
+            currentTime = 0;
+            document.getElementById('progressSlider').value = 0;
+            animatedMarkers.forEach(marker => map.removeLayer(marker));
+            animatedMarkers = [];
+        }
+
+        document.getElementById('playBtn').addEventListener('click', play);
+        document.getElementById('pauseBtn').addEventListener('click', pause);
+        document.getElementById('resetBtn').addEventListener('click', reset);
+    </script>
 </body>
 </html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Homepage</title>
+  <style>
+    html,body{height:100%;margin:0}
+    body{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#ffffff;
+      transition: background 300ms ease;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    body.alt-bg{background:#bfe7ff}
+    .btn{
+      appearance:none;
+      border:0;
+      padding:14px 22px;
+      border-radius:10px;
+      font-size:16px;
+      cursor:pointer;
+      box-shadow:0 6px 18px rgba(0,0,0,0.12);
+      background:linear-gradient(180deg,#fff 0%,#e6f2ff 100%);
+    }
+    .btn:active{transform:translateY(1px)}
+  </style>
+</head>
+<body>
+  <button id="toggleBtn" class="btn" aria-pressed="false">Change background</button>
+
+  <script>
+    const btn = document.getElementById('toggleBtn');
+    btn.addEventListener('click', () => {
+      document.body.classList.toggle('alt-bg');
+      const isAlt = document.body.classList.contains('alt-bg');
+      btn.setAttribute('aria-pressed', String(isAlt));
+      // optional: change button text
+      btn.textContent = isAlt ? 'Revert background' : 'Change background';
+    });
+  </script>
+</body>
+</html>
