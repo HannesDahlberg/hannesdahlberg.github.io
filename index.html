@@ -16,10 +16,21 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            background: #1a1a2e;
         }
-        #map {
+        #mapContainer {
             flex: 1;
             width: 100%;
+            position: relative;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: none;
         }
         .controls {
             background: white;
@@ -47,6 +58,14 @@
             background: #ccc;
             cursor: not-allowed;
         }
+        select {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
         .speed-control {
             display: flex;
             align-items: center;
@@ -71,84 +90,54 @@
             color: #666;
             font-size: 14px;
         }
-        .auth-section {
-            background: #f5f5f5;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px;
-            max-width: 800px;
-        }
-        .auth-section h2 {
-            margin-bottom: 15px;
-            color: #333;
-        }
-        .auth-section input {
-            padding: 8px;
-            margin: 5px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .auth-section input[type="text"] {
-            width: 400px;
-        }
-        .auth-section p {
-            margin: 10px 0;
-            color: #666;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-        .auth-section a {
-            color: #fc4c02;
-            text-decoration: none;
-        }
-        .auth-section a:hover {
-            text-decoration: underline;
-        }
-        .auth-section code {
-            background: #e0e0e0;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 13px;
-        }
-        .setup-overlay {
+        .splash-overlay {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(0,0,0,0.7);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 10000;
         }
-        .setup-box {
+        .splash-box {
             background: white;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 600px;
-            max-height: 90vh;
-            overflow-y: auto;
+            padding: 50px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
         }
-        .setup-box h2 {
-            margin-bottom: 20px;
+        .splash-box h1 {
             color: #333;
+            margin-bottom: 15px;
+            font-size: 32px;
         }
-        .setup-box ol {
-            margin-left: 20px;
-            line-height: 1.8;
+        .splash-box p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
         }
-        .setup-box li {
-            margin: 10px 0;
+        .strava-btn {
+            background: #fc4c02;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s;
         }
-        .setup-box input {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+        .strava-btn:hover {
+            background: #e04402;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(252, 76, 2, 0.3);
         }
         .hidden {
             display: none;
@@ -156,37 +145,33 @@
     </style>
 </head>
 <body>
-    <div id="setupOverlay" class="setup-overlay">
-        <div class="setup-box">
-            <h2>🔧 Strava API Setup</h2>
-            <ol>
-                <li>Go to <a href="https://www.strava.com/settings/api" target="_blank">Strava API Settings</a></li>
-                <li>Create an app (or use existing):
-                    <ul>
-                        <li><strong>Application Name:</strong> My Route Visualizer</li>
-                        <li><strong>Category:</strong> Visualizer</li>
-                        <li><strong>Website:</strong> http://localhost</li>
-                        <li><strong>Authorization Callback Domain:</strong> <code>localhost</code></li>
-                    </ul>
-                </li>
-                <li>Copy your <strong>Client ID</strong> and <strong>Client Secret</strong></li>
-                <li>Paste them below:</li>
-            </ol>
-            
-            <input type="text" id="clientId" placeholder="Client ID" />
-            <input type="text" id="clientSecret" placeholder="Client Secret" />
-            
-            <button onclick="saveCredentials()">Save & Connect to Strava</button>
-            <p style="margin-top: 15px; font-size: 13px; color: #999;">
-                Your credentials are stored only in your browser for this session.
-            </p>
+    <div id="splashOverlay" class="splash-overlay">
+        <div class="splash-box">
+            <h1>🗺️ Strava Route Visualizer</h1>
+            <p>Visualize all your Strava activities on an interactive map. Watch your running journey unfold with animated playback.</p>
+            <button class="strava-btn" onclick="connectToStrava()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                    <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/>
+                </svg>
+                Connect with Strava
+            </button>
         </div>
     </div>
 
-    <div id="map"></div>
+    <div id="mapContainer">
+        <div id="map"></div>
+        <canvas id="canvas"></canvas>
+    </div>
+    
     <div class="controls">
-        <button id="connectBtn">Connect to Strava</button>
         <button id="loadActivitiesBtn" disabled>Load Activities</button>
+        
+        <select id="viewMode" disabled>
+            <option value="map">Map Overlay</option>
+            <option value="centered">Common Start Point</option>
+            <option value="appended">Appended Journey</option>
+        </select>
+        
         <span id="status">Not connected</span>
         <button id="playBtn" disabled>Play</button>
         <button id="pauseBtn" disabled>Pause</button>
@@ -203,9 +188,9 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/polyline-encoded/0.0.9/Polyline.encoded.min.js"></script>
     <script>
         let map;
+        let canvas, ctx;
         let activities = [];
         let allRoutes = [];
         let animatedMarkers = [];
@@ -214,17 +199,22 @@
         let startTime = null;
         let currentTime = 0;
         let animationFrame = null;
-        
-        let clientId = '';
-        let clientSecret = '';
         let accessToken = '';
-        let refreshToken = '';
+        let currentViewMode = 'map';
+        
+        // CONFIGURATION - Update these values
+        const STRAVA_CLIENT_ID = 'YOUR_CLIENT_ID'; // Replace with your Strava Client ID
+        const USE_BACKEND = false; // Set to true if using Vercel backend
+        const BACKEND_URL = ''; // e.g., 'https://your-app.vercel.app/api/auth'
 
-        // Initialize map
+        // Initialize map and canvas
         map = L.map('map').setView([20, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+        
+        canvas = document.getElementById('canvas');
+        ctx = canvas.getContext('2d');
 
         // Check if already authenticated
         window.addEventListener('load', () => {
@@ -232,80 +222,54 @@
             const code = params.get('code');
             
             if (code) {
-                exchangeToken(code);
+                if (USE_BACKEND) {
+                    exchangeTokenWithBackend(code);
+                } else {
+                    document.getElementById('status').textContent = 'Please set up backend or use manual token';
+                }
             }
             
-            // Check if credentials exist
-            const storedClientId = sessionStorage.getItem('strava_client_id');
-            const storedClientSecret = sessionStorage.getItem('strava_client_secret');
-            
-            if (storedClientId && storedClientSecret) {
-                clientId = storedClientId;
-                clientSecret = storedClientSecret;
-                document.getElementById('setupOverlay').classList.add('hidden');
-            }
+            resizeCanvas();
         });
-
-        function saveCredentials() {
-            clientId = document.getElementById('clientId').value.trim();
-            clientSecret = document.getElementById('clientSecret').value.trim();
-            
-            if (!clientId || !clientSecret) {
-                alert('Please enter both Client ID and Client Secret');
-                return;
+        
+        window.addEventListener('resize', resizeCanvas);
+        
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            if (currentViewMode !== 'map') {
+                redrawCanvas();
             }
-            
-            sessionStorage.setItem('strava_client_id', clientId);
-            sessionStorage.setItem('strava_client_secret', clientSecret);
-            
-            document.getElementById('setupOverlay').classList.add('hidden');
-            connectToStrava();
         }
 
         function connectToStrava() {
             const redirectUri = window.location.origin + window.location.pathname;
             const scope = 'read,activity:read_all';
-            const authUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=${scope}`;
+            const authUrl = `https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=${scope}`;
             window.location.href = authUrl;
         }
 
-        async function exchangeToken(code) {
+        async function exchangeTokenWithBackend(code) {
             document.getElementById('status').textContent = 'Authenticating...';
             
-            const storedClientId = sessionStorage.getItem('strava_client_id');
-            const storedClientSecret = sessionStorage.getItem('strava_client_secret');
-            
-            if (!storedClientId || !storedClientSecret) {
-                document.getElementById('status').textContent = 'Error: Missing credentials';
-                return;
-            }
-            
             try {
-                const response = await fetch('https://www.strava.com/oauth/token', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        client_id: storedClientId,
-                        client_secret: storedClientSecret,
-                        code: code,
-                        grant_type: 'authorization_code'
-                    })
-                });
-                
+                const response = await fetch(`${BACKEND_URL}?code=${code}`);
                 const data = await response.json();
-                accessToken = data.access_token;
-                refreshToken = data.refresh_token;
                 
-                document.getElementById('status').textContent = 'Connected!';
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('loadActivitiesBtn').disabled = false;
-                
-                // Clean URL
-                window.history.replaceState({}, document.title, window.location.pathname);
+                if (response.ok) {
+                    accessToken = data.access_token;
+                    document.getElementById('splashOverlay').classList.add('hidden');
+                    document.getElementById('status').textContent = `Connected as ${data.athlete.firstname} ${data.athlete.lastname}`;
+                    document.getElementById('loadActivitiesBtn').disabled = false;
+                    
+                    // Clean URL
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } else {
+                    document.getElementById('status').textContent = 'Authentication failed';
+                    console.error(data);
+                }
             } catch (error) {
-                document.getElementById('status').textContent = 'Authentication failed';
+                document.getElementById('status').textContent = 'Authentication error';
                 console.error(error);
             }
         }
@@ -339,12 +303,14 @@
                     document.getElementById('status').textContent = `Loading activities... ${allActivities.length} found`;
                 }
                 
+                // Sort by date
+                allActivities.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
+                
                 // Filter for activities with GPS data and load detailed streams
                 let loadedCount = 0;
                 for (const activity of allActivities) {
                     if (activity.map && activity.map.summary_polyline) {
                         try {
-                            // Get detailed stream data
                             const streamResponse = await fetch(
                                 `https://www.strava.com/api/v3/activities/${activity.id}/streams?keys=latlng,time&key_by_type=true`,
                                 {
@@ -366,17 +332,9 @@
                                 activities.push({
                                     name: activity.name,
                                     points: points,
-                                    type: activity.type
+                                    type: activity.type,
+                                    date: new Date(activity.start_date)
                                 });
-                                
-                                // Draw full route
-                                const coords = points.map(p => [p.lat, p.lon]);
-                                const polyline = L.polyline(coords, {
-                                    color: activity.type === 'Run' ? '#fc4c02' : '#0066cc',
-                                    weight: 2,
-                                    opacity: 0.6
-                                }).addTo(map);
-                                allRoutes.push(polyline);
                                 
                                 loadedCount++;
                                 document.getElementById('status').textContent = `Loaded ${loadedCount}/${allActivities.length} activities`;
@@ -388,13 +346,11 @@
                 }
                 
                 if (activities.length > 0) {
-                    // Fit map to all routes
-                    const group = new L.featureGroup(allRoutes);
-                    map.fitBounds(group.getBounds());
-                    
                     document.getElementById('status').textContent = `${activities.length} activities loaded`;
                     document.getElementById('playBtn').disabled = false;
                     document.getElementById('resetBtn').disabled = false;
+                    document.getElementById('viewMode').disabled = false;
+                    switchViewMode('map');
                 } else {
                     document.getElementById('status').textContent = 'No activities with GPS data found';
                 }
@@ -406,10 +362,207 @@
             }
         }
 
+        function switchViewMode(mode) {
+            currentViewMode = mode;
+            reset();
+            
+            // Clear existing visualizations
+            allRoutes.forEach(route => map.removeLayer(route));
+            allRoutes = [];
+            animatedMarkers.forEach(marker => map.removeLayer(marker));
+            animatedMarkers = [];
+            
+            if (mode === 'map') {
+                document.getElementById('map').style.display = 'block';
+                document.getElementById('canvas').style.display = 'none';
+                drawMapMode();
+            } else {
+                document.getElementById('map').style.display = 'none';
+                document.getElementById('canvas').style.display = 'block';
+                resizeCanvas();
+                if (mode === 'centered') {
+                    drawCenteredMode();
+                } else if (mode === 'appended') {
+                    drawAppendedMode();
+                }
+            }
+        }
+
+        function drawMapMode() {
+            activities.forEach(activity => {
+                const coords = activity.points.map(p => [p.lat, p.lon]);
+                const polyline = L.polyline(coords, {
+                    color: activity.type === 'Run' ? '#fc4c02' : '#0066cc',
+                    weight: 2,
+                    opacity: 0.6
+                }).addTo(map);
+                allRoutes.push(polyline);
+            });
+            
+            const group = new L.featureGroup(allRoutes);
+            map.fitBounds(group.getBounds());
+        }
+
+        function latLonToMeters(lat, lon, refLat, refLon) {
+            const R = 6371000; // Earth radius in meters
+            const dLat = (lat - refLat) * Math.PI / 180;
+            const dLon = (lon - refLon) * Math.PI / 180;
+            const x = dLon * R * Math.cos(refLat * Math.PI / 180);
+            const y = dLat * R;
+            return { x, y };
+        }
+
+        function drawCenteredMode() {
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Find bounds for all activities in meters
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            
+            const convertedActivities = activities.map(activity => {
+                const refLat = activity.points[0].lat;
+                const refLon = activity.points[0].lon;
+                
+                const meterPoints = activity.points.map(p => 
+                    latLonToMeters(p.lat, p.lon, refLat, refLon)
+                );
+                
+                meterPoints.forEach(p => {
+                    minX = Math.min(minX, p.x);
+                    maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxY = Math.max(maxY, p.y);
+                });
+                
+                return { ...activity, meterPoints };
+            });
+            
+            const rangeX = maxX - minX;
+            const rangeY = maxY - minY;
+            const padding = 50;
+            const scale = Math.min(
+                (canvas.width - 2 * padding) / rangeX,
+                (canvas.height - 2 * padding) / rangeY
+            );
+            
+            // Draw all routes centered at canvas center
+            convertedActivities.forEach((activity, idx) => {
+                const hue = (idx / activities.length) * 360;
+                ctx.strokeStyle = `hsla(${hue}, 70%, 60%, 0.6)`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                activity.meterPoints.forEach((p, i) => {
+                    const x = canvas.width / 2 + p.x * scale;
+                    const y = canvas.height / 2 - p.y * scale;
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                ctx.stroke();
+            });
+            
+            // Store for animation
+            activities.forEach((activity, idx) => {
+                activity.convertedPoints = convertedActivities[idx].meterPoints.map(p => ({
+                    x: canvas.width / 2 + p.x * scale,
+                    y: canvas.height / 2 - p.y * scale
+                }));
+            });
+        }
+
+        function drawAppendedMode() {
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            let currentX = 0, currentY = 0;
+            let minX = 0, maxX = 0, minY = 0, maxY = 0;
+            
+            // First pass: calculate bounds
+            const appendedActivities = [];
+            activities.forEach(activity => {
+                const refLat = activity.points[0].lat;
+                const refLon = activity.points[0].lon;
+                
+                const meterPoints = activity.points.map(p => 
+                    latLonToMeters(p.lat, p.lon, refLat, refLon)
+                );
+                
+                const offsetPoints = meterPoints.map(p => ({
+                    x: currentX + p.x,
+                    y: currentY + p.y
+                }));
+                
+                offsetPoints.forEach(p => {
+                    minX = Math.min(minX, p.x);
+                    maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y);
+                    maxY = Math.max(maxY, p.y);
+                });
+                
+                appendedActivities.push({ ...activity, offsetPoints });
+                
+                const lastPoint = meterPoints[meterPoints.length - 1];
+                currentX += lastPoint.x;
+                currentY += lastPoint.y;
+            });
+            
+            // Calculate scale
+            const rangeX = maxX - minX;
+            const rangeY = maxY - minY;
+            const padding = 50;
+            const scale = Math.min(
+                (canvas.width - 2 * padding) / rangeX,
+                (canvas.height - 2 * padding) / rangeY
+            );
+            
+            const offsetX = -minX * scale + padding;
+            const offsetY = -minY * scale + padding;
+            
+            // Draw appended routes
+            appendedActivities.forEach((activity, idx) => {
+                const hue = (idx / activities.length) * 360;
+                ctx.strokeStyle = `hsla(${hue}, 70%, 60%, 0.8)`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                activity.offsetPoints.forEach((p, i) => {
+                    const x = p.x * scale + offsetX;
+                    const y = canvas.height - (p.y * scale + offsetY);
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                ctx.stroke();
+            });
+            
+            // Store for animation
+            activities.forEach((activity, idx) => {
+                activity.convertedPoints = appendedActivities[idx].offsetPoints.map(p => ({
+                    x: p.x * scale + offsetX,
+                    y: canvas.height - (p.y * scale + offsetY)
+                }));
+            });
+        }
+
+        function redrawCanvas() {
+            if (currentViewMode === 'centered') {
+                drawCenteredMode();
+            } else if (currentViewMode === 'appended') {
+                drawAppendedMode();
+            }
+        }
+
         // Speed control
         document.getElementById('speedSlider').addEventListener('input', (e) => {
             animationSpeed = parseInt(e.target.value);
             document.getElementById('speedValue').textContent = `${animationSpeed}x`;
+        });
+        
+        document.getElementById('viewMode').addEventListener('change', (e) => {
+            switchViewMode(e.target.value);
         });
 
         // Animation function
@@ -420,7 +573,6 @@
             const elapsed = timestamp - startTime;
             currentTime = elapsed * animationSpeed;
             
-            // Find earliest and latest times
             let minTime = Infinity;
             let maxTime = -Infinity;
             activities.forEach(activity => {
@@ -442,7 +594,16 @@
             
             document.getElementById('progressSlider').value = progress;
             
-            // Update markers
+            if (currentViewMode === 'map') {
+                animateMap();
+            } else {
+                animateCanvas();
+            }
+            
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        function animateMap() {
             animatedMarkers.forEach(marker => map.removeLayer(marker));
             animatedMarkers = [];
             
@@ -450,7 +611,6 @@
                 const startActivityTime = activity.points[0].time;
                 const activityCurrentTime = startActivityTime + currentTime;
                 
-                // Find current position
                 for (let i = 0; i < activity.points.length - 1; i++) {
                     if (activity.points[i].time <= activityCurrentTime && 
                         activity.points[i + 1].time > activityCurrentTime) {
@@ -465,8 +625,31 @@
                     }
                 }
             });
+        }
+
+        function animateCanvas() {
+            redrawCanvas();
             
-            animationFrame = requestAnimationFrame(animate);
+            activities.forEach((activity, actIdx) => {
+                const startActivityTime = activity.points[0].time;
+                const activityCurrentTime = startActivityTime + currentTime;
+                
+                for (let i = 0; i < activity.points.length - 1; i++) {
+                    if (activity.points[i].time <= activityCurrentTime && 
+                        activity.points[i + 1].time > activityCurrentTime) {
+                        const p = activity.convertedPoints[i];
+                        
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+                        ctx.fillStyle = '#ff0000';
+                        ctx.fill();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        break;
+                    }
+                }
+            });
         }
 
         function play() {
@@ -494,15 +677,12 @@
             document.getElementById('progressSlider').value = 0;
             animatedMarkers.forEach(marker => map.removeLayer(marker));
             animatedMarkers = [];
+            
+            if (currentViewMode !== 'map') {
+                redrawCanvas();
+            }
         }
 
-        document.getElementById('connectBtn').addEventListener('click', () => {
-            if (!clientId || !clientSecret) {
-                document.getElementById('setupOverlay').classList.remove('hidden');
-            } else {
-                connectToStrava();
-            }
-        });
         document.getElementById('loadActivitiesBtn').addEventListener('click', loadActivities);
         document.getElementById('playBtn').addEventListener('click', play);
         document.getElementById('pauseBtn').addEventListener('click', pause);
