@@ -203,7 +203,7 @@
         let currentViewMode = 'map';
         
         // CONFIGURATION - Update with your Strava Client ID
-        const STRAVA_CLIENT_ID = 'YOUR_CLIENT_ID'; // Replace with your actual Strava Client ID
+        const STRAVA_CLIENT_ID = '179970'; // Replace with your actual Strava Client ID
 
         // Initialize map and canvas
         map = L.map('map').setView([20, 0], 2);
@@ -290,37 +290,6 @@
             }
         }
 
-        // Decode polyline (Strava uses encoded polylines)
-        function decodePolyline(encoded) {
-            const points = [];
-            let index = 0, len = encoded.length;
-            let lat = 0, lng = 0;
-
-            while (index < len) {
-                let b, shift = 0, result = 0;
-                do {
-                    b = encoded.charCodeAt(index++) - 63;
-                    result |= (b & 0x1f) << shift;
-                    shift += 5;
-                } while (b >= 0x20);
-                const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
-                lat += dlat;
-
-                shift = 0;
-                result = 0;
-                do {
-                    b = encoded.charCodeAt(index++) - 63;
-                    result |= (b & 0x1f) << shift;
-                    shift += 5;
-                } while (b >= 0x20);
-                const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
-                lng += dlng;
-
-                points.push([lat / 1e5, lng / 1e5]);
-            }
-            return points;
-        }
-
         async function loadActivities() {
             document.getElementById('status').textContent = 'Loading activities...';
             document.getElementById('loadActivitiesBtn').disabled = true;
@@ -353,80 +322,43 @@
                 // Sort by date
                 allActivities.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
                 
-                // Use summary polylines (much faster!) and fetch detailed streams in parallel
-                const activitiesWithGPS = allActivities.filter(a => a.map && a.map.summary_polyline);
-                document.getElementById('status').textContent = `Processing ${activitiesWithGPS.length} activities...`;
-                
-                // Process in batches of 10 for better performance
-                const batchSize = 10;
+                // Filter for activities with GPS data and load detailed streams
                 let loadedCount = 0;
-                
-                for (let i = 0; i < activitiesWithGPS.length; i += batchSize) {
-                    const batch = activitiesWithGPS.slice(i, i + batchSize);
-                    
-                    // Fetch all streams in parallel
-                    const streamPromises = batch.map(activity =>
-                        fetch(
-                            `https://www.strava.com/api/v3/activities/${activity.id}/streams?keys=time&key_by_type=true`,
-                            {
-                                headers: {
-                                    'Authorization': `Bearer ${accessToken}`
+                for (const activity of allActivities) {
+                    if (activity.map && activity.map.summary_polyline) {
+                        try {
+                            const streamResponse = await fetch(
+                                `https://www.strava.com/api/v3/activities/${activity.id}/streams?keys=latlng,time&key_by_type=true`,
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${accessToken}`
+                                    }
                                 }
-                            }
-                        )
-                        .then(res => res.json())
-                        .then(streams => ({ activity, streams }))
-                        .catch(error => {
-                            console.error(`Failed to load activity ${activity.id}:`, error);
-                            return null;
-                        })
-                    );
-                    
-                    const results = await Promise.all(streamPromises);
-                    
-                    results.forEach(result => {
-                        if (!result) return;
-                        
-                        const { activity, streams } = result;
-                        
-                        // Decode the polyline
-                        const coords = decodePolyline(activity.map.summary_polyline);
-                        
-                        if (coords.length > 0) {
-                            // Create time array - if we have time stream use it, otherwise estimate
-                            let points;
-                            if (streams.time && streams.time.data) {
-                                const timeData = streams.time.data;
-                                points = coords.map((coord, i) => {
-                                    const timeIndex = Math.floor((i / coords.length) * timeData.length);
-                                    return {
-                                        lat: coord[0],
-                                        lon: coord[1],
-                                        time: new Date(activity.start_date).getTime() + (timeData[timeIndex] * 1000)
-                                    };
-                                });
-                            } else {
-                                // Estimate time based on duration
-                                const duration = activity.elapsed_time * 1000;
-                                points = coords.map((coord, i) => ({
+                            );
+                            
+                            const streams = await streamResponse.json();
+                            
+                            if (streams.latlng && streams.time) {
+                                const points = streams.latlng.data.map((coord, i) => ({
                                     lat: coord[0],
                                     lon: coord[1],
-                                    time: new Date(activity.start_date).getTime() + (i / coords.length) * duration
+                                    time: new Date(activity.start_date).getTime() + (streams.time.data[i] * 1000)
                                 }));
+                                
+                                activities.push({
+                                    name: activity.name,
+                                    points: points,
+                                    type: activity.type,
+                                    date: new Date(activity.start_date)
+                                });
+                                
+                                loadedCount++;
+                                document.getElementById('status').textContent = `Loaded ${loadedCount}/${allActivities.length} activities`;
                             }
-                            
-                            activities.push({
-                                name: activity.name,
-                                points: points,
-                                type: activity.type,
-                                date: new Date(activity.start_date)
-                            });
-                            
-                            loadedCount++;
+                        } catch (error) {
+                            console.error(`Failed to load activity ${activity.id}:`, error);
                         }
-                    });
-                    
-                    document.getElementById('status').textContent = `Loaded ${loadedCount}/${activitiesWithGPS.length} activities`;
+                    }
                 }
                 
                 if (activities.length > 0) {
