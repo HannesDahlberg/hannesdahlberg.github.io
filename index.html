@@ -30,27 +30,6 @@
             align-items: center;
             flex-wrap: wrap;
         }
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-        .file-input-wrapper input[type=file] {
-            position: absolute;
-            left: -9999px;
-        }
-        .file-input-wrapper label {
-            background: #fc4c02;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 600;
-            display: inline-block;
-        }
-        .file-input-wrapper label:hover {
-            background: #e04402;
-        }
         button {
             background: #fc4c02;
             color: white;
@@ -88,20 +67,127 @@
         .progress input {
             width: 100%;
         }
-        #fileCount {
+        #status {
             color: #666;
             font-size: 14px;
+        }
+        .auth-section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px;
+            max-width: 800px;
+        }
+        .auth-section h2 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .auth-section input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .auth-section input[type="text"] {
+            width: 400px;
+        }
+        .auth-section p {
+            margin: 10px 0;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .auth-section a {
+            color: #fc4c02;
+            text-decoration: none;
+        }
+        .auth-section a:hover {
+            text-decoration: underline;
+        }
+        .auth-section code {
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+        .setup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        .setup-box {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .setup-box h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .setup-box ol {
+            margin-left: 20px;
+            line-height: 1.8;
+        }
+        .setup-box li {
+            margin: 10px 0;
+        }
+        .setup-box input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .hidden {
+            display: none;
         }
     </style>
 </head>
 <body>
+    <div id="setupOverlay" class="setup-overlay">
+        <div class="setup-box">
+            <h2>🔧 Strava API Setup</h2>
+            <ol>
+                <li>Go to <a href="https://www.strava.com/settings/api" target="_blank">Strava API Settings</a></li>
+                <li>Create an app (or use existing):
+                    <ul>
+                        <li><strong>Application Name:</strong> My Route Visualizer</li>
+                        <li><strong>Category:</strong> Visualizer</li>
+                        <li><strong>Website:</strong> http://localhost</li>
+                        <li><strong>Authorization Callback Domain:</strong> <code>localhost</code></li>
+                    </ul>
+                </li>
+                <li>Copy your <strong>Client ID</strong> and <strong>Client Secret</strong></li>
+                <li>Paste them below:</li>
+            </ol>
+            
+            <input type="text" id="clientId" placeholder="Client ID" />
+            <input type="text" id="clientSecret" placeholder="Client Secret" />
+            
+            <button onclick="saveCredentials()">Save & Connect to Strava</button>
+            <p style="margin-top: 15px; font-size: 13px; color: #999;">
+                Your credentials are stored only in your browser for this session.
+            </p>
+        </div>
+    </div>
+
     <div id="map"></div>
     <div class="controls">
-        <div class="file-input-wrapper">
-            <input type="file" id="fileInput" multiple accept=".gpx,.tcx" />
-            <label for="fileInput">Load GPX/TCX Files</label>
-        </div>
-        <span id="fileCount">No files loaded</span>
+        <button id="connectBtn">Connect to Strava</button>
+        <button id="loadActivitiesBtn" disabled>Load Activities</button>
+        <span id="status">Not connected</span>
         <button id="playBtn" disabled>Play</button>
         <button id="pauseBtn" disabled>Pause</button>
         <button id="resetBtn" disabled>Reset</button>
@@ -117,6 +203,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/polyline-encoded/0.0.9/Polyline.encoded.min.js"></script>
     <script>
         let map;
         let activities = [];
@@ -127,6 +214,11 @@
         let startTime = null;
         let currentTime = 0;
         let animationFrame = null;
+        
+        let clientId = '';
+        let clientSecret = '';
+        let accessToken = '';
+        let refreshToken = '';
 
         // Initialize map
         map = L.map('map').setView([20, 0], 2);
@@ -134,89 +226,185 @@
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        // Parse GPX file
-        function parseGPX(xmlDoc) {
-            const points = [];
-            const trkpts = xmlDoc.getElementsByTagName('trkpt');
+        // Check if already authenticated
+        window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
             
-            for (let i = 0; i < trkpts.length; i++) {
-                const pt = trkpts[i];
-                const lat = parseFloat(pt.getAttribute('lat'));
-                const lon = parseFloat(pt.getAttribute('lon'));
-                const timeEl = pt.getElementsByTagName('time')[0];
-                const time = timeEl ? new Date(timeEl.textContent).getTime() : null;
-                
-                points.push({ lat, lon, time });
+            if (code) {
+                exchangeToken(code);
             }
-            return points;
+            
+            // Check if credentials exist
+            const storedClientId = sessionStorage.getItem('strava_client_id');
+            const storedClientSecret = sessionStorage.getItem('strava_client_secret');
+            
+            if (storedClientId && storedClientSecret) {
+                clientId = storedClientId;
+                clientSecret = storedClientSecret;
+                document.getElementById('setupOverlay').classList.add('hidden');
+            }
+        });
+
+        function saveCredentials() {
+            clientId = document.getElementById('clientId').value.trim();
+            clientSecret = document.getElementById('clientSecret').value.trim();
+            
+            if (!clientId || !clientSecret) {
+                alert('Please enter both Client ID and Client Secret');
+                return;
+            }
+            
+            sessionStorage.setItem('strava_client_id', clientId);
+            sessionStorage.setItem('strava_client_secret', clientSecret);
+            
+            document.getElementById('setupOverlay').classList.add('hidden');
+            connectToStrava();
         }
 
-        // Parse TCX file
-        function parseTCX(xmlDoc) {
-            const points = [];
-            const trackpoints = xmlDoc.getElementsByTagName('Trackpoint');
-            
-            for (let i = 0; i < trackpoints.length; i++) {
-                const tp = trackpoints[i];
-                const posEl = tp.getElementsByTagName('Position')[0];
-                if (!posEl) continue;
-                
-                const lat = parseFloat(posEl.getElementsByTagName('LatitudeDegrees')[0].textContent);
-                const lon = parseFloat(posEl.getElementsByTagName('LongitudeDegrees')[0].textContent);
-                const timeEl = tp.getElementsByTagName('Time')[0];
-                const time = timeEl ? new Date(timeEl.textContent).getTime() : null;
-                
-                points.push({ lat, lon, time });
-            }
-            return points;
+        function connectToStrava() {
+            const redirectUri = window.location.origin + window.location.pathname;
+            const scope = 'read,activity:read_all';
+            const authUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=${scope}`;
+            window.location.href = authUrl;
         }
 
-        // Load files
-        document.getElementById('fileInput').addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
+        async function exchangeToken(code) {
+            document.getElementById('status').textContent = 'Authenticating...';
+            
+            const storedClientId = sessionStorage.getItem('strava_client_id');
+            const storedClientSecret = sessionStorage.getItem('strava_client_secret');
+            
+            if (!storedClientId || !storedClientSecret) {
+                document.getElementById('status').textContent = 'Error: Missing credentials';
+                return;
+            }
+            
+            try {
+                const response = await fetch('https://www.strava.com/oauth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        client_id: storedClientId,
+                        client_secret: storedClientSecret,
+                        code: code,
+                        grant_type: 'authorization_code'
+                    })
+                });
+                
+                const data = await response.json();
+                accessToken = data.access_token;
+                refreshToken = data.refresh_token;
+                
+                document.getElementById('status').textContent = 'Connected!';
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('loadActivitiesBtn').disabled = false;
+                
+                // Clean URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } catch (error) {
+                document.getElementById('status').textContent = 'Authentication failed';
+                console.error(error);
+            }
+        }
+
+        async function loadActivities() {
+            document.getElementById('status').textContent = 'Loading activities...';
+            document.getElementById('loadActivitiesBtn').disabled = true;
+            
             activities = [];
             allRoutes.forEach(route => map.removeLayer(route));
             allRoutes = [];
             
-            for (const file of files) {
-                const text = await file.text();
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(text, 'text/xml');
+            try {
+                let page = 1;
+                let allActivities = [];
                 
-                let points;
-                if (file.name.toLowerCase().endsWith('.gpx')) {
-                    points = parseGPX(xmlDoc);
-                } else if (file.name.toLowerCase().endsWith('.tcx')) {
-                    points = parseTCX(xmlDoc);
-                }
-                
-                if (points && points.length > 0) {
-                    activities.push({
-                        name: file.name,
-                        points: points
+                // Fetch all activities (paginated)
+                while (true) {
+                    const response = await fetch(`https://www.strava.com/api/v3/athlete/activities?page=${page}&per_page=200`, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`
+                        }
                     });
                     
-                    // Draw full route
-                    const coords = points.map(p => [p.lat, p.lon]);
-                    const polyline = L.polyline(coords, {
-                        color: '#fc4c02',
-                        weight: 2,
-                        opacity: 0.6
-                    }).addTo(map);
-                    allRoutes.push(polyline);
+                    const data = await response.json();
+                    if (data.length === 0) break;
+                    
+                    allActivities = allActivities.concat(data);
+                    page++;
+                    
+                    document.getElementById('status').textContent = `Loading activities... ${allActivities.length} found`;
                 }
-            }
-            
-            if (activities.length > 0) {
-                // Fit map to all routes
-                const group = new L.featureGroup(allRoutes);
-                map.fitBounds(group.getBounds());
                 
-                document.getElementById('fileCount').textContent = `${activities.length} activities loaded`;
-                document.getElementById('playBtn').disabled = false;
-                document.getElementById('resetBtn').disabled = false;
+                // Filter for activities with GPS data and load detailed streams
+                let loadedCount = 0;
+                for (const activity of allActivities) {
+                    if (activity.map && activity.map.summary_polyline) {
+                        try {
+                            // Get detailed stream data
+                            const streamResponse = await fetch(
+                                `https://www.strava.com/api/v3/activities/${activity.id}/streams?keys=latlng,time&key_by_type=true`,
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${accessToken}`
+                                    }
+                                }
+                            );
+                            
+                            const streams = await streamResponse.json();
+                            
+                            if (streams.latlng && streams.time) {
+                                const points = streams.latlng.data.map((coord, i) => ({
+                                    lat: coord[0],
+                                    lon: coord[1],
+                                    time: new Date(activity.start_date).getTime() + (streams.time.data[i] * 1000)
+                                }));
+                                
+                                activities.push({
+                                    name: activity.name,
+                                    points: points,
+                                    type: activity.type
+                                });
+                                
+                                // Draw full route
+                                const coords = points.map(p => [p.lat, p.lon]);
+                                const polyline = L.polyline(coords, {
+                                    color: activity.type === 'Run' ? '#fc4c02' : '#0066cc',
+                                    weight: 2,
+                                    opacity: 0.6
+                                }).addTo(map);
+                                allRoutes.push(polyline);
+                                
+                                loadedCount++;
+                                document.getElementById('status').textContent = `Loaded ${loadedCount}/${allActivities.length} activities`;
+                            }
+                        } catch (error) {
+                            console.error(`Failed to load activity ${activity.id}:`, error);
+                        }
+                    }
+                }
+                
+                if (activities.length > 0) {
+                    // Fit map to all routes
+                    const group = new L.featureGroup(allRoutes);
+                    map.fitBounds(group.getBounds());
+                    
+                    document.getElementById('status').textContent = `${activities.length} activities loaded`;
+                    document.getElementById('playBtn').disabled = false;
+                    document.getElementById('resetBtn').disabled = false;
+                } else {
+                    document.getElementById('status').textContent = 'No activities with GPS data found';
+                }
+            } catch (error) {
+                document.getElementById('status').textContent = 'Error loading activities';
+                console.error(error);
+            } finally {
+                document.getElementById('loadActivitiesBtn').disabled = false;
             }
-        });
+        }
 
         // Speed control
         document.getElementById('speedSlider').addEventListener('input', (e) => {
@@ -308,6 +496,14 @@
             animatedMarkers = [];
         }
 
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            if (!clientId || !clientSecret) {
+                document.getElementById('setupOverlay').classList.remove('hidden');
+            } else {
+                connectToStrava();
+            }
+        });
+        document.getElementById('loadActivitiesBtn').addEventListener('click', loadActivities);
         document.getElementById('playBtn').addEventListener('click', play);
         document.getElementById('pauseBtn').addEventListener('click', pause);
         document.getElementById('resetBtn').addEventListener('click', reset);
