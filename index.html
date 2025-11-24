@@ -1,30 +1,328 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>My PDF</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background: #000;
-    }
-    body {
-      display: flex;
-      align-items: stretch;
-      justify-content: stretch;
-    }
-    embed {
-      width: 100vw;
-      height: 100vh;
-      border: none;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mouse Pointer Juggler</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: system-ui, -apple-system, sans-serif;
+            touch-action: none; /* Prevent scroll on mobile */
+        }
+        canvas {
+            display: block;
+        }
+        #instructions {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            pointer-events: none;
+            user-select: none;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        #controls {
+            position: absolute;
+            top: 50px;
+            width: 100%;
+            text-align: center;
+            z-index: 10;
+        }
+        label {
+            color: #888;
+            font-size: 14px;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        input[type=range] {
+            vertical-align: middle;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
-  <!-- Replace document.pdf with your actual PDF file name -->
-  <embed src="document.pdf" type="application/pdf">
+    <div id="instructions">Click & Hold to catch balls mid-air. Release to fling!</div>
+    <div id="controls">
+        <label for="radiusSlider">Grab Radius:</label>
+        <input type="range" id="radiusSlider" min="20" max="200" value="60">
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const radiusSlider = document.getElementById('radiusSlider');
+
+        // Physics Constants
+        const GRAVITY = 0.6;
+        const FRICTION = 0.99; // Air resistance
+        const BOUNCE = 0.7; // Energy kept after hitting walls
+        const THROW_FORCE = 1.3; // Multiplier for fling strength
+        const FLOOR_FRICTION = 0.95; // Friction when rolling on ground
+
+        let grabRadius = parseInt(radiusSlider.value);
+
+        let width, height;
+        let balls = [];
+        const ballCount = 5;
+        
+        // Input state
+        let draggedBall = null;
+        let isMouseDown = false;
+        let mouseX = 0;
+        let mouseY = 0;
+        let prevMouseX = 0;
+        let prevMouseY = 0;
+        
+        // Velocity tracking for the throw
+        let dragVelocityX = 0;
+        let dragVelocityY = 0;
+
+        class Ball {
+            constructor(x, y, r, color) {
+                this.x = x;
+                this.y = y;
+                this.r = r;
+                this.color = color;
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.isDragging = false;
+            }
+
+            update() {
+                if (this.isDragging) {
+                    // While dragging, snap to mouse (no physics integration)
+                    this.x = mouseX;
+                    this.y = mouseY;
+                    // Velocity is effectively zero for physics calculations while held,
+                    // but we track mouse velocity externally for the release.
+                    this.vx = 0;
+                    this.vy = 0;
+                } else {
+                    // Apply Physics
+                    this.vy += GRAVITY;
+                    this.vx *= FRICTION;
+                    this.vy *= FRICTION;
+
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    // Floor Collision
+                    if (this.y + this.r > height) {
+                        this.y = height - this.r;
+                        this.vy *= -BOUNCE;
+                        this.vx *= FLOOR_FRICTION; // Apply extra friction on ground
+                        
+                        // Stop micro-bouncing
+                        if (Math.abs(this.vy) < GRAVITY * 2) {
+                            this.vy = 0;
+                        }
+                    } 
+                    // Ceiling Collision
+                    else if (this.y - this.r < 0) {
+                        this.y = this.r;
+                        this.vy *= -BOUNCE;
+                    }
+
+                    // Wall Collisions
+                    if (this.x + this.r > width) {
+                        this.x = width - this.r;
+                        this.vx *= -BOUNCE;
+                    } else if (this.x - this.r < 0) {
+                        this.x = this.r;
+                        this.vx *= -BOUNCE;
+                    }
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+                
+                // Gradient for 3D look
+                const gradient = ctx.createRadialGradient(
+                    this.x - this.r/3, this.y - this.r/3, this.r/10,
+                    this.x, this.y, this.r
+                );
+                gradient.addColorStop(0, '#fff');
+                gradient.addColorStop(0.3, this.color);
+                gradient.addColorStop(1, '#000');
+                
+                ctx.fillStyle = gradient;
+                
+                // Visual pop when dragging
+                if (this.isDragging) {
+                    ctx.shadowBlur = 20;
+                    ctx.shadowColor = this.color;
+                } else {
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset
+                ctx.closePath();
+            }
+        }
+
+        function init() {
+            resize();
+            window.addEventListener('resize', resize);
+            
+            // Create Balls
+            const colors = ['#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FFFF33'];
+            for (let i = 0; i < ballCount; i++) {
+                balls.push(new Ball(
+                    width / 2 + (Math.random() - 0.5) * 200,
+                    height / 2,
+                    25,
+                    colors[i % colors.length]
+                ));
+            }
+
+            loop();
+        }
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Initialize mouse to center if at 0,0
+            if (mouseX === 0 && mouseY === 0) {
+                mouseX = width / 2;
+                mouseY = height / 2;
+                prevMouseX = mouseX;
+                prevMouseY = mouseY;
+            }
+        }
+
+        // --- Input Handling ---
+
+        function tryCatchBall(x, y) {
+            // Check if intercepting a ball (iterate backwards to pick top ball first)
+            for (let i = balls.length - 1; i >= 0; i--) {
+                const b = balls[i];
+                const dx = x - b.x;
+                const dy = y - b.y;
+                
+                // Intersection Check: Distance < (Grab Radius + Ball Radius)
+                const distSq = dx * dx + dy * dy;
+                const reach = grabRadius + b.r;
+                
+                if (distSq <= reach * reach) {
+                    draggedBall = b;
+                    b.isDragging = true;
+                    // Move this ball to end of array so it draws on top
+                    balls.splice(i, 1);
+                    balls.push(b);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function handleStart(x, y) {
+            isMouseDown = true;
+            mouseX = x;
+            mouseY = y;
+            prevMouseX = x;
+            prevMouseY = y;
+
+            tryCatchBall(x, y);
+        }
+
+        function handleMove(x, y) {
+            mouseX = x;
+            mouseY = y;
+
+            // If mouse is down but we aren't holding anything, try to catch
+            if (isMouseDown && !draggedBall) {
+                tryCatchBall(x, y);
+            }
+
+            // Calculate instantaneous velocity of the mouse
+            if (draggedBall) {
+                dragVelocityX = (mouseX - prevMouseX) * THROW_FORCE;
+                dragVelocityY = (mouseY - prevMouseY) * THROW_FORCE;
+            }
+
+            prevMouseX = x;
+            prevMouseY = y;
+        }
+
+        function handleEnd() {
+            isMouseDown = false;
+            if (draggedBall) {
+                // Apply the calculated throw velocity
+                draggedBall.vx = dragVelocityX;
+                draggedBall.vy = dragVelocityY;
+                draggedBall.isDragging = false;
+                draggedBall = null;
+            }
+        }
+
+        // Mouse Events
+        canvas.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY));
+        window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+        window.addEventListener('mouseup', handleEnd);
+
+        // Touch Events
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            handleStart(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        
+        window.addEventListener('touchmove', e => {
+            e.preventDefault(); 
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+
+        window.addEventListener('touchend', handleEnd);
+
+        // Update radius when slider moves
+        radiusSlider.addEventListener('input', (e) => {
+            grabRadius = parseInt(e.target.value);
+        });
+
+        // --- Game Loop ---
+
+        function loop() {
+            // Clear screen
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Grab Radius Cursor
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; // Faint white circle
+            ctx.lineWidth = 2;
+            ctx.arc(mouseX, mouseY, grabRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw Ground Line
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, height - 1);
+            ctx.lineTo(width, height - 1);
+            ctx.stroke();
+
+            // Update and Draw Balls
+            for (let ball of balls) {
+                ball.update();
+                ball.draw();
+            }
+
+            requestAnimationFrame(loop);
+        }
+
+        init();
+
+    </script>
 </body>
 </html>
