@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My PDF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+    }
+    body {
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+    embed {
+      width: 100vw;
+      height: 100vh;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Replace document.pdf with your actual PDF file name -->
+  <embed src="document.pdf" type="application/pdf">
+</body>
+</html>
